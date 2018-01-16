@@ -23,7 +23,7 @@ void mergesort_(RandomAccessIterator first, RandomAccessIterator last)
     RandomAccessIterator middle = first + (last - first) / 2;
     mergesort_(first, middle);
     mergesort_(middle, last);
-    std::inplace_merge(first, middle, last, std::less<typename std::iterator_traits<RandomAccessIterator>::value_type>());
+    std::inplace_merge(first, middle, last, std::less<typename std::iterator_traits<RandomAccessIterator>::value_type>());    
     }
 }
 
@@ -41,7 +41,26 @@ void insertion_sort_(RandomAccessIterator begin, RandomAccessIterator end) {
 }
  
 void insertion_sort(std::vector<Int>& numbers) {
-  insertion_sort_(numbers.begin(), numbers.end());
+    insertion_sort_(numbers.begin(), numbers.end());
+}
+
+int threshold = 0;
+void mergesort_threshold(std::vector<Int>& numbers) {
+    auto first = numbers.begin();
+    auto last = numbers.end();
+    
+    if (last - first < threshold)
+    {
+        insertion_sort(numbers);
+    }
+    else
+    {
+        RandomAccessIterator middle = first + (last - first) / 2;
+        mergesort_(first, middle);
+        mergesort_(middle,last);
+    }
+    // RECOMBINER
+    //return void
 }
 
 void run(Algo algo, std::vector<Int>& numbers, bool print_res, bool print_time) {
@@ -68,6 +87,7 @@ int main(int argc, char *argv[]) {
         std::string file_path;
         bool print_res{false};
         bool print_time{false};
+        int threshold{0};
     } prog_args;
 
     // Read program arguments
