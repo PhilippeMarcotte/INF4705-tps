@@ -44,23 +44,27 @@ void insertion_sort(std::vector<Int>& numbers) {
     insertion_sort_(numbers.begin(), numbers.end());
 }
 
-int threshold = 0;
-void mergesort_threshold(std::vector<Int>& numbers) {
-    auto first = numbers.begin();
-    auto last = numbers.end();
-    
+int threshold = 1953;
+template <typename RandomAccessIterator>
+void mergesort_threshold_(RandomAccessIterator first, RandomAccessIterator last) {    
     if (last - first < threshold)
     {
-        insertion_sort(numbers);
+        insertion_sort_(first, last);
     }
     else
     {
         RandomAccessIterator middle = first + (last - first) / 2;
-        mergesort_(first, middle);
-        mergesort_(middle,last);
+        mergesort_threshold_(first, middle);
+        mergesort_threshold_(middle, last);
+        std::inplace_merge(first, middle, last, std::less<typename std::iterator_traits<RandomAccessIterator>::value_type>());
     }
-    // RECOMBINER
-    //return void
+}
+
+void mergesort_threshold(std::vector<Int>& numbers) {
+    auto first = numbers.begin();
+    auto last = numbers.end();
+
+    mergesort_threshold_(first, last);
 }
 
 void run(Algo algo, std::vector<Int>& numbers, bool print_res, bool print_time) {
@@ -101,6 +105,8 @@ int main(int argc, char *argv[]) {
             prog_args.print_res = true;
         } else if (arg == "-t") {
             prog_args.print_time = true;
+        } else if (arg == "-T") {
+            threshold = std::stoi(argv[i+1]); i++;
         }
     }
 
@@ -120,4 +126,6 @@ int main(int argc, char *argv[]) {
         run(mergesort, numbers, prog_args.print_res, prog_args.print_time);
     else if(prog_args.algo == "insertion_sort")
         run(insertion_sort, numbers, prog_args.print_res, prog_args.print_time);
+    else if(prog_args.algo == "mergesort_threshold")
+        run(mergesort_threshold, numbers, prog_args.print_res, prog_args.print_time);
 }
