@@ -44,7 +44,7 @@ void insertion_sort(std::vector<Int>& numbers) {
     insertion_sort_(numbers.begin(), numbers.end());
 }
 
-int threshold = 1953;
+int threshold = 100;
 template <typename RandomAccessIterator>
 void mergesort_threshold_(RandomAccessIterator first, RandomAccessIterator last) {    
     if (last - first < threshold)
