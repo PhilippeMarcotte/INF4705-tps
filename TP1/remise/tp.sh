@@ -1,0 +1,2 @@
+echo #!/bin/sh
+./sort "$@"
