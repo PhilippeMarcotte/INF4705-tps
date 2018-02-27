@@ -31,23 +31,34 @@ struct Block
         }
 
         criterion = (float)largeur * (float)profondeur * rapport + (float) hauteur;
-        std::cout << criterion << std::endl;
     }
 
     bool operator <(Block const& rhs) {
         return this->largeur < rhs.largeur && this->profondeur < rhs.profondeur;
     }
 
+    void setTabou()
+    {
+        tabou_it = rand()% 4 + 7;
+    }
+
+    bool updateTabou()
+    {
+        return !(--tabou_it);
+    }
+
     int hauteur;
     int largeur;
     int profondeur;
     float criterion;
+    int tabou_it;
 };
 
 using Algo = const std::function<std::vector<Block>(std::vector<Block>&)>&;
 
 std::vector<Block> vorace(std::vector<Block>& blocks)
 {
+    srand (time(NULL));
     std::sort(blocks.begin(), blocks.end(), 
         [](const Block& a, const Block& b) -> bool 
         {
@@ -60,8 +71,14 @@ std::vector<Block> vorace(std::vector<Block>& blocks)
         });
 
     std::vector<Block> stackedBlock;
-    for(auto it = blocks.begin(); it != blocks.end(); it++)
+    for(auto it = blocks.begin(); it != blocks.end(); ++it)
     {
+        int randomValue = rand() % 100;
+        if( randomValue < 25 && std::next(it) != blocks.end())
+        {
+            it++;
+        }
+
         if(!stackedBlock.empty())
         {
             if(*it < stackedBlock.back())
@@ -80,12 +97,144 @@ std::vector<Block> vorace(std::vector<Block>& blocks)
 
 std::vector<Block> progdyn(std::vector<Block>& blocks)
 {
-    return std::vector<Block>();
+    std::sort(blocks.begin(), blocks.end(), 
+        [](const Block& a, const Block& b) -> bool 
+        {
+            return a.largeur * a.profondeur > b.largeur * b.profondeur;
+        });
+
+    std::vector<Block> stackedBlocks[blocks.size()];
+    int maxStackedHeights[blocks.size()];
+
+    for(int i = 0; i < blocks.size(); i++)
+    {
+        maxStackedHeights[i] = blocks.at(i).hauteur;
+    }
+
+    for(int i = 1; i < blocks.size(); i++)
+    {
+        for(int j = 0; j < i; j++)
+        {
+            if(blocks.at(i) < blocks.at(j) && maxStackedHeights[i] < maxStackedHeights[j] + blocks.at(i).hauteur)
+            {
+                stackedBlocks[i].clear();
+                stackedBlocks[i] = stackedBlocks[j];
+                stackedBlocks[i].push_back(blocks.at(i));
+
+                maxStackedHeights[i] = maxStackedHeights[j] + blocks.at(i).hauteur;
+            }
+        }
+    }
+
+    int maxStackedHeight = 0;
+    std::vector<Block> stackedBlock;
+    for(int i = 0; i < blocks.size(); i++)
+    {
+        if(maxStackedHeights[i] > maxStackedHeight)
+        {
+            stackedBlock = stackedBlocks[i];
+            maxStackedHeight = maxStackedHeights[i];
+        }
+    }
+
+    std::cout << maxStackedHeight << std::endl;
+
+    return stackedBlock;
 }
 
 std::vector<Block> tabou(std::vector<Block>& blocks)
 {
-    return std::vector<Block>();
+    int maxHeight = 0;
+    std::vector<Block> bestTower;
+    std::vector<Block> currentTower;
+    std::vector<Block> currentTabous;
+
+    std::random_shuffle(blocks.begin(), blocks.end());
+
+    currentTower.push_back(blocks.pop_back());
+
+    for(int iteration = 0; iteration < 100; iteration++)
+    {
+        std::vector<Block> bestPossibleTower;
+        std::vector<Block> bestPossibleTabou;
+        int maxPossibleHeight = 0;
+        auto bestPossibleInsertedBlockIt = blocks.begin();
+
+        for(auto unstackedBlockIt = blocks.begin(); unstackedBlockIt != blocks.end(); unstackedBlockIt++)
+        {
+            std::vector<Block> possibleTower = currentTower;
+            std::vector<Block> possibleTabous;
+
+            auto insertedBlockIt = possibleTower.begin();
+            for(auto stackedBlockedIt = possibleTower.rbegin(); stackedBlockedIt != possibleTower.rend(); stackedBlockedIt++)
+            {
+                Block unstackedBlock = *unstackedBlockIt;
+                Block stackedBlock = *stackedBlockedIt;
+
+                if(unstackedBlock < stackedBlock)
+                {
+                    insertedBlockIt = possibleTower.insert(stackedBlockedIt + 1, unstackedBlock);
+                    break;
+                }
+            }
+
+            Block insertedBlock = *insertedBlockIt;
+
+            for(auto blockToTabouIt = insertedBlockIt + 1; blockToTabouIt != possibleTower.end(); blockToTabouIt++)
+            {
+                Block blockToTabou = *blockToTabouIt;
+
+                if(blockToTabou > insertedBlock)
+                {
+                    possibleTabous.push_back(blockToTabou);
+                    blockTabouIt = possibleTower.erase(blockTabouIt);
+                }
+                else
+                {
+                    break;
+                }
+            }
+
+            int height = 0;
+            for(auto stackedBlockedIt = possibleTower.begin(); stackedBlockedIt != possibleTower.end(); stackedBlockedIt++)
+            {
+                height += stackedBlockedIt->hauteur;
+            }
+
+            if(height > maxPossibleHeight)
+            {
+                bestPossibleTower = possibleTower;
+                bestPossibleTabou = possibleTabous;
+                maxPossibleHeight = height;
+                bestPossibleInsertedBlockIt = insertedBlockIt;
+            }
+        }
+
+        if(maxPossibleHeight > maxHeight)
+        {
+            maxHeight = maxPossibleHeight;
+            bestTower = bestPossibleTower;
+
+            iteration = 0;
+        }
+
+        currentTower = maxPossibleHeight;
+
+        for(auto blockTabouIt = currentTabous.begin(); blockTabouIt != currentTabous.end(); blockTabouIt++)
+        {
+            if(blockTabouIt->updateTabou())
+            {
+                blocks.push_back(*blockTabouIt);
+                blockTabouIt = currentTabous.erase(blockTabouIt);
+            }
+        }
+
+        currentTabous.insert(currentTabous.end(), bestPossibleTabou.begin(), bestPossibleTabou.end());
+
+        blocks.erase(bestPossibleInsertedBlockIt);
+    }
+
+    return bestTower;
 }
 
 void run(Algo algo, std::vector<Block>& blocks, bool print_res, bool print_time, bool print_height) {
@@ -101,7 +250,7 @@ void run(Algo algo, std::vector<Block>& blocks, bool print_res, bool print_time,
 
     if (print_res) {
         std::cout << std::fixed;
-        for (auto it = stackedBlock.rbegin(); it != stackedBlock.rend(); it++)
+        for (auto it = stackedBlock.begin(); it != stackedBlock.end(); it++)
             std::cout << it->hauteur << " " << it->largeur << " " << it->profondeur << std::endl;
     }
 
