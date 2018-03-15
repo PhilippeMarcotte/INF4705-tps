@@ -37,21 +37,26 @@ struct Block
         return this->largeur < rhs.largeur && this->profondeur < rhs.profondeur;
     }
 
+    bool fitOn(Block const& bottom)
+    {
+        return this->largeur < rhs.largeur && this->profondeur < rhs.profondeur;
+    }
+
     void setTabou()
     {
-        tabou_it = rand()% 4 + 7;
+        tabouIt = rand()% 4 + 7;
     }
 
     bool updateTabou()
     {
-        return !(--tabou_it);
+        return !(--tabouIt);
     }
 
     int hauteur;
     int largeur;
     int profondeur;
     float criterion;
-    int tabou_it;
+    int tabouIt;
 };
 
 using Algo = const std::function<std::vector<Block>(std::vector<Block>&)>&;
@@ -142,51 +147,69 @@ std::vector<Block> progdyn(std::vector<Block>& blocks)
     return stackedBlock;
 }
 
-std::vector<Block> tabou(std::vector<Block>& blocks)
+std::vector<Block> tabou(std::vector<Block>& unstackedBlocks)
 {
     int maxHeight = 0;
     std::vector<Block> bestTower;
     std::vector<Block> currentTower;
     std::vector<Block> currentTabous;
 
-    std::random_shuffle(blocks.begin(), blocks.end());
+    std::random_shuffle(unstackedBlocks.begin(), unstackedBlocks.end());
 
-    currentTower.push_back(blocks.pop_back());
+    // Take the first random block
+    currentTower.push_back(unstackedBlocks.pop_back());
 
+    // Start iterating and stop when no better tower is found during a 100 iterations    
     for(int iteration = 0; iteration < 100; iteration++)
     {
         std::vector<Block> bestPossibleTower;
         std::vector<Block> bestPossibleTabou;
         int maxPossibleHeight = 0;
-        auto bestPossibleInsertedBlockIt = blocks.begin();
+        auto bestPossibleInsertedBlockIt = unstackedBlocks.begin();
 
-        for(auto unstackedBlockIt = blocks.begin(); unstackedBlockIt != blocks.end(); unstackedBlockIt++)
+        // Iterate every unstacked block to compute every possibilities
+        for(auto unstackedBlockIt = unstackedBlocks.begin(); unstackedBlockIt != unstackedBlocks.end(); unstackedBlockIt++)
         {
             std::vector<Block> possibleTower = currentTower;
             std::vector<Block> possibleTabous;
 
+            // Assume that the block will have to be inserted at the tower's base 
             auto insertedBlockIt = possibleTower.begin();
+
+            // Check where the block should be inserted
             for(auto stackedBlockedIt = possibleTower.rbegin(); stackedBlockedIt != possibleTower.rend(); stackedBlockedIt++)
             {
                 Block unstackedBlock = *unstackedBlockIt;
                 Block stackedBlock = *stackedBlockedIt;
 
-                if(unstackedBlock < stackedBlock)
+                // If the block fit on one of the tower's block insert it on it (right after)
+                if(unstackedBlock.fitOn(stackedBlock))
                 {
+                    // Update the position of the new block
                     insertedBlockIt = possibleTower.insert(stackedBlockedIt + 1, unstackedBlock);
                     break;
                 }
             }
 
+            // If the position of the block never changed, it has to be the new tower's base
+            if(insertedBlockIt == possibleTower.begin())
+            {
+                insertedBlockIt = possibleTower.insert(possibleTower.begin(), unstackedBlock);
+            }
+
             Block insertedBlock = *insertedBlockIt;
 
+            // Check if the blocks, that the new block did not fit on, fit on the new block. If not, tabou it.
             for(auto blockToTabouIt = insertedBlockIt + 1; blockToTabouIt != possibleTower.end(); blockToTabouIt++)
             {
                 Block blockToTabou = *blockToTabouIt;
 
-                if(blockToTabou > insertedBlock)
+                if(!blockToTabou.fitOn(insertedBlock))
                 {
+                    // Put in tabou
                     possibleTabous.push_back(blockToTabou);
+
+                    // Remove from the tower
                     blockTabouIt = possibleTower.erase(blockTabouIt);
                 }
                 else
@@ -196,42 +219,55 @@ std::vector<Block> tabou(std::vector<Block>& blocks)
             }
 
             int height = 0;
+            // Compute the height of the possible tower
             for(auto stackedBlockedIt = possibleTower.begin(); stackedBlockedIt != possibleTower.end(); stackedBlockedIt++)
             {
                 height += stackedBlockedIt->hauteur;
             }
 
+            // Check if it is the best possible tower encountered
             if(height > maxPossibleHeight)
             {
                 bestPossibleTower = possibleTower;
                 bestPossibleTabou = possibleTabous;
                 maxPossibleHeight = height;
-                bestPossibleInsertedBlockIt = insertedBlockIt;
+                
+                // Remember the position of the block as to remove it if this possible tower is chosen
+                bestPossibleInsertedBlockIt = unstackedBlockIt;
             }
         }
 
+        // Check if the chosen possible tower is taller than the tallest tower encountered
         if(maxPossibleHeight > maxHeight)
         {
             maxHeight = maxPossibleHeight;
             bestTower = bestPossibleTower;
 
+            // Reset the iteration because we encountered a better tower
             iteration = 0;
         }
 
         currentTower = maxPossibleHeight;
 
+        // Update the already tabous blocks
         for(auto blockTabouIt = currentTabous.begin(); blockTabouIt != currentTabous.end(); blockTabouIt++)
         {
             if(blockTabouIt->updateTabou())
             {
-                blocks.push_back(*blockTabouIt);
+                unstackedBlocks.push_back(*blockTabouIt);
                 blockTabouIt = currentTabous.erase(blockTabouIt);
             }
         }
 
-        currentTabous.insert(currentTabous.end(), bestPossibleTabou.begin(), bestPossibleTabou.end());
+        // Set tabou of the new tabous and add them to the current tabous
+        for(auto blockTabouIt = bestPossibleTabou.begin(); blockTabouIt != bestPossibleTabou.end(); blockTabouIt++)
+        {
+            blockTabouIt->setTabou();
+            currentTabous.push_back(*blockTabouIt);
+        }
 
-        blocks.erase(bestPossibleInsertedBlockIt);
+        // Remove the added block from the unstacked blocks
+        unstackedBlocks.erase(bestPossibleInsertedBlockIt);
     }
 
     return bestTower;
