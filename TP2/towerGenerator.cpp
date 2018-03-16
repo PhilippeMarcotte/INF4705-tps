@@ -8,6 +8,8 @@
 #include <stack>
 #include <string>
 #include <sstream>
+#include <memory>
+#include <math.h>
 
 
 using Int = long long;
@@ -37,9 +39,9 @@ struct Block
         return this->largeur < rhs.largeur && this->profondeur < rhs.profondeur;
     }
 
-    bool fitOn(Block const& bottom)
+    bool fitOn(Block const& bottom) const
     {
-        return this->largeur < rhs.largeur && this->profondeur < rhs.profondeur;
+        return this->largeur < bottom.largeur && this->profondeur < bottom.profondeur;
     }
 
     void setTabou()
@@ -52,27 +54,21 @@ struct Block
         return !(--tabouIt);
     }
 
-    int hauteur;
-    int largeur;
-    int profondeur;
-    float criterion;
-    int tabouIt;
+    int hauteur = 0;
+    int largeur = 0;
+    int profondeur = 0;
+    float criterion = 0;
+    int tabouIt = 0;
 };
 
 using Algo = const std::function<std::vector<Block>(std::vector<Block>&)>&;
-
+int seed = 0;
 std::vector<Block> vorace(std::vector<Block>& blocks)
 {
-    srand (time(NULL));
     std::sort(blocks.begin(), blocks.end(), 
         [](const Block& a, const Block& b) -> bool 
         {
-            if(a.criterion != b.criterion)
-            {
-                return a.criterion > b.criterion;
-            }
-                
-            return rand() % 2;
+            return a.criterion > b.criterion;
         });
 
     std::vector<Block> stackedBlock;
@@ -86,7 +82,7 @@ std::vector<Block> vorace(std::vector<Block>& blocks)
 
         if(!stackedBlock.empty())
         {
-            if(*it < stackedBlock.back())
+            if(it->fitOn(stackedBlock.back()))
             {
                 stackedBlock.push_back(*it);
             }
@@ -108,23 +104,24 @@ std::vector<Block> progdyn(std::vector<Block>& blocks)
             return a.largeur * a.profondeur > b.largeur * b.profondeur;
         });
 
-    std::vector<Block> stackedBlocks[blocks.size()];
+    std::vector<std::vector<Block>> stackedBlocks;
     int maxStackedHeights[blocks.size()];
 
     for(int i = 0; i < blocks.size(); i++)
     {
         maxStackedHeights[i] = blocks.at(i).hauteur;
+        stackedBlocks.push_back(std::vector<Block>());
     }
 
     for(int i = 1; i < blocks.size(); i++)
     {
         for(int j = 0; j < i; j++)
         {
-            if(blocks.at(i) < blocks.at(j) && maxStackedHeights[i] < maxStackedHeights[j] + blocks.at(i).hauteur)
+            if(blocks.at(i).fitOn(blocks.at(j)) && maxStackedHeights[i] < maxStackedHeights[j] + blocks.at(i).hauteur)
             {
-                stackedBlocks[i].clear();
-                stackedBlocks[i] = stackedBlocks[j];
-                stackedBlocks[i].push_back(blocks.at(i));
+                stackedBlocks.at(i).clear();
+                stackedBlocks.at(i) = stackedBlocks[j];
+                stackedBlocks.at(i).push_back(blocks.at(i));
 
                 maxStackedHeights[i] = maxStackedHeights[j] + blocks.at(i).hauteur;
             }
@@ -149,35 +146,44 @@ std::vector<Block> progdyn(std::vector<Block>& blocks)
 
 std::vector<Block> tabou(std::vector<Block>& unstackedBlocks)
 {
+    srand(time(NULL));
     int maxHeight = 0;
-    std::vector<Block> bestTower;
-    std::vector<Block> currentTower;
-    std::vector<Block> currentTabous;
+    std::unique_ptr<std::vector<Block>> bestTower;
+    std::unique_ptr<std::vector<Block>> currentTower = std::make_unique<std::vector<Block>>(std::vector<Block>());
+    std::unique_ptr<std::vector<Block>> currentTabous = std::make_unique<std::vector<Block>>(std::vector<Block>());
 
     std::random_shuffle(unstackedBlocks.begin(), unstackedBlocks.end());
 
     // Take the first random block
-    currentTower.push_back(unstackedBlocks.pop_back());
+    currentTower->push_back(unstackedBlocks.back());
+    unstackedBlocks.pop_back();
 
     // Start iterating and stop when no better tower is found during a 100 iterations    
     for(int iteration = 0; iteration < 100; iteration++)
     {
-        std::vector<Block> bestPossibleTower;
-        std::vector<Block> bestPossibleTabou;
+        std::unique_ptr<std::vector<Block>> bestPossibleTower;
+        std::unique_ptr<std::vector<Block>> bestPossibleTabou;
         int maxPossibleHeight = 0;
         auto bestPossibleInsertedBlockIt = unstackedBlocks.begin();
 
-        // Iterate every unstacked block to compute every possibilities
-        for(auto unstackedBlockIt = unstackedBlocks.begin(); unstackedBlockIt != unstackedBlocks.end(); unstackedBlockIt++)
+        // Shuffle before selecting first 10% blocks as to make the selection random
+        std::random_shuffle(unstackedBlocks.begin(), unstackedBlocks.end());
+
+        // Compute iterator that ends the first 10% blocks
+        auto random10PercentEnd = unstackedBlocks.begin();
+        std::advance(random10PercentEnd, int(ceil(unstackedBlocks.size() * 0.1)));
+
+        // Iterate first 10% unstacked blocks to compute possibilities
+        for(auto unstackedBlockIt = unstackedBlocks.begin(); unstackedBlockIt != random10PercentEnd; unstackedBlockIt++)
         {
-            std::vector<Block> possibleTower = currentTower;
-            std::vector<Block> possibleTabous;
+            std::unique_ptr<std::vector<Block>> possibleTower = std::make_unique<std::vector<Block>>(*currentTower.get());
+            std::unique_ptr<std::vector<Block>> possibleTabous = std::make_unique<std::vector<Block>>(std::vector<Block>());
 
             // Assume that the block will have to be inserted at the tower's base 
-            auto insertedBlockIt = possibleTower.begin();
+            auto insertedBlockIt = possibleTower->begin();
 
             // Check where the block should be inserted
-            for(auto stackedBlockedIt = possibleTower.rbegin(); stackedBlockedIt != possibleTower.rend(); stackedBlockedIt++)
+            for(auto stackedBlockedIt = possibleTower->rbegin(); stackedBlockedIt != possibleTower->rend(); ++stackedBlockedIt)
             {
                 Block unstackedBlock = *unstackedBlockIt;
                 Block stackedBlock = *stackedBlockedIt;
@@ -186,31 +192,33 @@ std::vector<Block> tabou(std::vector<Block>& unstackedBlocks)
                 if(unstackedBlock.fitOn(stackedBlock))
                 {
                     // Update the position of the new block
-                    insertedBlockIt = possibleTower.insert(stackedBlockedIt + 1, unstackedBlock);
+                    insertedBlockIt = possibleTower->insert(stackedBlockedIt.base(), unstackedBlock);
                     break;
                 }
             }
 
             // If the position of the block never changed, it has to be the new tower's base
-            if(insertedBlockIt == possibleTower.begin())
+            if(insertedBlockIt == possibleTower->begin())
             {
-                insertedBlockIt = possibleTower.insert(possibleTower.begin(), unstackedBlock);
+                insertedBlockIt = possibleTower->insert(possibleTower->begin(), *unstackedBlockIt);
             }
 
             Block insertedBlock = *insertedBlockIt;
-
+            insertedBlockIt++;
+            
             // Check if the blocks, that the new block did not fit on, fit on the new block. If not, tabou it.
-            for(auto blockToTabouIt = insertedBlockIt + 1; blockToTabouIt != possibleTower.end(); blockToTabouIt++)
+            for(auto blockToTabouIt = insertedBlockIt; blockToTabouIt != possibleTower->end(); ++blockToTabouIt)
             {
                 Block blockToTabou = *blockToTabouIt;
 
                 if(!blockToTabou.fitOn(insertedBlock))
                 {
                     // Put in tabou
-                    possibleTabous.push_back(blockToTabou);
+                    possibleTabous->push_back(blockToTabou);
 
                     // Remove from the tower
-                    blockTabouIt = possibleTower.erase(blockTabouIt);
+                    blockToTabouIt = possibleTower->erase(blockToTabouIt);
+                    if(blockToTabouIt == possibleTower->end()) break;
                 }
                 else
                 {
@@ -220,7 +228,7 @@ std::vector<Block> tabou(std::vector<Block>& unstackedBlocks)
 
             int height = 0;
             // Compute the height of the possible tower
-            for(auto stackedBlockedIt = possibleTower.begin(); stackedBlockedIt != possibleTower.end(); stackedBlockedIt++)
+            for(auto stackedBlockedIt = possibleTower->begin(); stackedBlockedIt != possibleTower->end(); ++stackedBlockedIt)
             {
                 height += stackedBlockedIt->hauteur;
             }
@@ -228,8 +236,8 @@ std::vector<Block> tabou(std::vector<Block>& unstackedBlocks)
             // Check if it is the best possible tower encountered
             if(height > maxPossibleHeight)
             {
-                bestPossibleTower = possibleTower;
-                bestPossibleTabou = possibleTabous;
+                bestPossibleTower = std::move(possibleTower);
+                bestPossibleTabou = std::move(possibleTabous);
                 maxPossibleHeight = height;
                 
                 // Remember the position of the block as to remove it if this possible tower is chosen
@@ -241,36 +249,37 @@ std::vector<Block> tabou(std::vector<Block>& unstackedBlocks)
         if(maxPossibleHeight > maxHeight)
         {
             maxHeight = maxPossibleHeight;
-            bestTower = bestPossibleTower;
+            bestTower = std::make_unique<std::vector<Block>>(*bestPossibleTower.get());
 
             // Reset the iteration because we encountered a better tower
             iteration = 0;
         }
 
-        currentTower = maxPossibleHeight;
+        currentTower = std::move(bestPossibleTower);
 
         // Update the already tabous blocks
-        for(auto blockTabouIt = currentTabous.begin(); blockTabouIt != currentTabous.end(); blockTabouIt++)
+        for(auto blockTabouIt = currentTabous->begin(); blockTabouIt != currentTabous->end(); blockTabouIt++)
         {
             if(blockTabouIt->updateTabou())
             {
                 unstackedBlocks.push_back(*blockTabouIt);
-                blockTabouIt = currentTabous.erase(blockTabouIt);
+                blockTabouIt = currentTabous->erase(blockTabouIt);
+                if(blockTabouIt == currentTabous->end()) break;
             }
         }
 
         // Set tabou of the new tabous and add them to the current tabous
-        for(auto blockTabouIt = bestPossibleTabou.begin(); blockTabouIt != bestPossibleTabou.end(); blockTabouIt++)
+        for(auto blockTabouIt = bestPossibleTabou->begin(); blockTabouIt != bestPossibleTabou->end(); blockTabouIt++)
         {
             blockTabouIt->setTabou();
-            currentTabous.push_back(*blockTabouIt);
+            currentTabous->push_back(*blockTabouIt);
         }
 
         // Remove the added block from the unstacked blocks
         unstackedBlocks.erase(bestPossibleInsertedBlockIt);
     }
 
-    return bestTower;
+    return *(bestTower.get());
 }
 
 void run(Algo algo, std::vector<Block>& blocks, bool print_res, bool print_time, bool print_height) {
@@ -295,7 +304,7 @@ void run(Algo algo, std::vector<Block>& blocks, bool print_res, bool print_time,
         for (auto it = stackedBlock.begin(); it != stackedBlock.end(); it++)
             height += it->hauteur;
 
-        std::cout << "Hauteur de la tour: " << height << std::endl;
+        std::cout << "," << height << std::endl;
     }
 }
 
@@ -321,6 +330,8 @@ int main(int argc, char *argv[]) {
             prog_args.print_time = true;
         } else if (arg == "-h") {
             prog_args.print_height = true;
+        } else if (arg == "-s") {
+            seed = std::stoi(argv[i+1]); i++;
         }
     }
 
