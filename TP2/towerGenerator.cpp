@@ -66,6 +66,7 @@ using Algo = const std::function<std::vector<Block>(std::vector<Block>&)>&;
 int seed = 0;
 std::vector<Block> vorace(std::vector<Block>& blocks)
 {
+    srand(seed);
     std::sort(blocks.begin(), blocks.end(), 
         [](const Block& a, const Block& b) -> bool 
         {
