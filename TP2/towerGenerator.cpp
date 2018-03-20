@@ -290,7 +290,7 @@ void run(Algo algo, std::vector<Block>& blocks, bool print_res, bool print_time,
         for (auto it = stackedBlock.begin(); it != stackedBlock.end(); it++)
             height += it->hauteur;
 
-        std::cout << "," << height << std::endl;
+        std::cout << height << std::endl;
     }
 }
 
