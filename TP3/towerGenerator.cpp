@@ -74,7 +74,7 @@ std::vector<Block> vorace(std::vector<Block>& blocks)
     int towerHeight = 0;
 
     std::vector<Block> stackedBlock;
-    for(auto it = blocks.begin(); it != blocks.end(); ++it)
+    for(auto it = blocks.begin(); it != blocks.end();)
     {
         int randomValue = rand() % 100;
         if( randomValue < 25 && std::next(it) != blocks.end())
@@ -101,7 +101,11 @@ std::vector<Block> vorace(std::vector<Block>& blocks)
             if (towerHeight >= maxTowerHeight) break;
 
             stackedBlock.push_back(*blockToStack);
-            it = blocks.erase(it);
+            it = blocks.erase(it++);
+        }
+        else
+        {
+            ++it;
         }
     }
 
@@ -142,11 +146,11 @@ std::vector<Block> tabou(std::vector<Block>& unstackedBlocks)
         int bestPossibleNbrOfBlockToTabou = 0;
 
         // Shuffle before selecting first 10% blocks as to make the selection random
-        //std::random_shuffle(unstackedBlocks.begin(), unstackedBlocks.end());
+        // std::random_shuffle(unstackedBlocks.begin(), unstackedBlocks.end());
 
         // Compute iterator that ends the first 10% blocks
         auto random10PercentEnd = unstackedBlocks.end();
-        //std::advance(random10PercentEnd, int(ceil(unstackedBlocks.size() * 0.1)));
+        // std::advance(random10PercentEnd, int(ceil(unstackedBlocks.size() * 0.1)));
 
         // Iterate first 10% unstacked blocks to compute possibilities
         for(auto unstackedBlockIt = unstackedBlocks.begin(); unstackedBlockIt != random10PercentEnd; unstackedBlockIt++)
@@ -252,7 +256,7 @@ void run(Algo algo, std::vector<Block>& blocks, bool print_res, bool print_time)
         std::cout << std::fixed;
         for (auto tower = towers.begin(); tower != towers.end(); tower++)
         {
-            std::cout << towers.size() << std::endl;
+            std::cout << tower->size() << std::endl;
             for (auto block = tower->begin(); block != tower->end(); block++)
                 std::cout << block->hauteur << " " << block->largeur << " " << block->profondeur << std::endl;
         }
