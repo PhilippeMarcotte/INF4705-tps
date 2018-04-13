@@ -9,7 +9,7 @@
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/towerGenerator",
-            "args": ["-a", "vorace", "-e", "./testset/b100_1.txt", "-s", "1"],
+            "args": ["-e", "./INF4705_TP3_EXS/b200_100000_0"],
             "stopAtEntry": true,
             "cwd": "${workspaceFolder}",
             "environment": [],
