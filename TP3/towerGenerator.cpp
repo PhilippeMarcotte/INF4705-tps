@@ -10,7 +10,7 @@
 #include <math.h>
 #include <map>
 #include <memory>
-#include "ConcurrentWaitingQueue.h"
+#include "blockingconcurrentqueue.h"
 
 #include <thread>
 
@@ -128,7 +128,7 @@ struct Tower
     
     void setTabou(int blockId)
     {
-        tabous[blockId] = rand()% 100 + 100;
+        tabous[blockId] = rand()% 1000 + 1000;
     }
 
     bool updateTabou()
@@ -184,6 +184,11 @@ struct Tower
     bool empty()
     {
         return blocks.empty();
+    }
+
+    void sort(bool(*predicate)(Block&, Block&))
+    {
+        blocks.sort(predicate);
     }
 
     std::map<int, int> tabous;
@@ -314,11 +319,12 @@ std::list<Block> trimTower(Towers::iterator& tower, Block& blockToInsert, std::l
     return blocksToRemove;
 }
 
-std::list<Block> findBestTowerToInsertInto(Towers& towers, Block& blockToInsert, Towers::iterator& smallestTower, 
+Tower findBestTowerToInsertInto(Towers& towers, Block& blockToInsert, Towers::iterator& smallestTower, 
                                              int& bestTowerToInsert, int& bestTowerInsertion)
 {
     int smallestNbrOfBlocsToRemove = INT32_MAX;
-    std::list<Block> smallestBlocksToRemove;
+    int bestSolutionSquareHeight = INT32_MAX;
+    Tower smallestBlocksToRemove;
     std::list<Block> blocksToRemove;
     Towers::iterator towerToInsertIt;
     int towerToInsert;
@@ -346,12 +352,40 @@ std::list<Block> findBestTowerToInsertInto(Towers& towers, Block& blockToInsert,
 
         blocksToRemove = trimTower(towerToInsertIt, blockToInsert, blocksToRemove);
 
-        if (blocksToRemove.size() < smallestNbrOfBlocsToRemove)
+        if (blocksToRemove.size() <= smallestNbrOfBlocsToRemove)
         {
-            smallestBlocksToRemove = blocksToRemove;
-            bestTowerToInsert = towerToInsert;
-            bestTowerInsertion = towerInsertion;
-            smallestNbrOfBlocsToRemove = blocksToRemove.size();
+            Tower blocksToRemoveTower(blocksToRemove);
+            bool isNewSolutionReallyBetter = true;
+            
+            if (blocksToRemove.size() == smallestNbrOfBlocsToRemove)
+            {
+                int towerToInsertSquareHeight = towerToInsertIt->height - blocksToRemoveTower.height + blockToInsert.hauteur;
+                towerToInsertSquareHeight *= towerToInsertSquareHeight;
+
+                int towerToRemoveSquareHeight = blocksToRemoveTower.height * blocksToRemoveTower.height;
+
+                int smallestTowerSquareHeight = smallestTower->height - blockToInsert.hauteur;
+                smallestTowerSquareHeight *= smallestTowerSquareHeight;
+
+                int solutionSquareHeight = towerToInsertSquareHeight + towerToRemoveSquareHeight + smallestTowerSquareHeight;
+
+                if (solutionSquareHeight < bestSolutionSquareHeight)
+                {
+                    bestSolutionSquareHeight = solutionSquareHeight;
+                }
+                else
+                {
+                    isNewSolutionReallyBetter = false;
+                }
+            }
+
+            if (isNewSolutionReallyBetter)
+            {
+                smallestBlocksToRemove = blocksToRemove;
+                bestTowerToInsert = towerToInsert;
+                bestTowerInsertion = towerInsertion;
+                smallestNbrOfBlocsToRemove = blocksToRemove.size();
+            }
         }
         
         blocksToRemove.clear();
@@ -362,13 +396,12 @@ std::list<Block> findBestTowerToInsertInto(Towers& towers, Block& blockToInsert,
 
 void tabou(Towers& currentSolution, bool(*predicate)(Block&, Block&))
 {
-    // Start iterating and stop when no better tower is found during a 100 iterations    
     auto smallestTowerIt = std::next(currentSolution.begin(), findSmallestTower(currentSolution));
     int towerToInsert;
     int towerInsertion;
     Block blockToMove = smallestTowerIt->back();
 
-    std::list<Block> blocksToRemove = 
+    Tower blocksToRemove = 
         findBestTowerToInsertInto(currentSolution, blockToMove, smallestTowerIt, towerToInsert, towerInsertion);
     
     auto towerToInsertIt = std::next(currentSolution.begin(), towerToInsert);
@@ -402,13 +435,13 @@ void tabou(Towers& currentSolution, bool(*predicate)(Block&, Block&))
     {
         blocksToRemove.sort(predicate);
         
-        currentSolution.emplace_back(blocksToRemove);
-        blocksToRemove.clear();
+        currentSolution.push_back(blocksToRemove);
     }
 }
 
-static ConcurrentWaitingQueue<Towers> queue;
-void run(std::list<Block> blocks, bool(*predicate)(Block&, Block&)) {
+static moodycamel::BlockingConcurrentQueue<Towers> queue;
+void run(std::list<Block> blocks, bool(*predicate)(Block&, Block&)) 
+{
     Towers& solution = multiTowersVorace(blocks, predicate);
     int smallestSolutionSize = INT32_MAX;
 
@@ -416,14 +449,14 @@ void run(std::list<Block> blocks, bool(*predicate)(Block&, Block&)) {
     {
         if(solution.size() < smallestSolutionSize)
         {
-            queue.push(solution);
+            queue.enqueue(solution);
             smallestSolutionSize = solution.size();
         }
         tabou(solution, predicate);
     }
 }
 
-void runVorace(std::list<Block> blocks, bool(*predicate)(Block&, Block&)) 
+void runOnlyVorace(std::list<Block> blocks, bool(*predicate)(Block&, Block&)) 
 {
     int smallestSolutionSize = INT32_MAX;
     while(true)
@@ -432,7 +465,7 @@ void runVorace(std::list<Block> blocks, bool(*predicate)(Block&, Block&))
         Towers& solution = multiTowersVorace(copy, predicate);
         if(solution.size() < smallestSolutionSize)
         {
-            queue.push(solution);
+            queue.enqueue(solution);
             smallestSolutionSize = solution.size();
         }
     }
@@ -481,18 +514,17 @@ int main(int argc, char *argv[]) {
     }
 
     bool(* predicates [])(Block&, Block&) = {areaCriterion, areaAndShortestCriterion, squarestCriterion, squarestAndShortestCriterion};
-    for (int i = 0; i < std::thread::hardware_concurrency() - 1; ++i)
+    for (int i = 0; i < std::thread::hardware_concurrency(); ++i)
     {
         std::thread(run, blocks, predicates[i]).detach();
     }
-    std::thread(runVorace, blocks, squarestAndShortestCriterion).detach();
 
     int sizeBestSolution = INT32_MAX;
     // Check if the chosen possible tower is taller than the tallest tower encountered
     while(true)
     {
         Towers solution;
-        queue.pop(solution);
+        queue.wait_dequeue(solution);
         if(solution.size() < sizeBestSolution)
         {
             sizeBestSolution = solution.size();
