@@ -5,12 +5,19 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Python: Current File",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "args": ["./INF4705_TP3_EXS/b10000_100000_0", "resultat.txt"]
+        },
+        {
             "name": "(gdb) Launch",
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/towerGenerator",
             "args": ["-e", "./INF4705_TP3_EXS/b200_100000_0"],
-            "stopAtEntry": true,
+            "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],
             "externalConsole": true,

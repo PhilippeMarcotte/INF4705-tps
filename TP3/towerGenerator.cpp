@@ -1,24 +1,22 @@
 #include <list>
-#include <vector>
 #include <fstream>
 #include <functional>
-#include <chrono>
 #include <iostream>
 #include <algorithm>
 #include <numeric>
 #include <iterator>
-#include <stack>
 #include <string>
 #include <sstream>
-#include <memory>
 #include <math.h>
 #include <map>
+#include <memory>
+#include "ConcurrentWaitingQueue.h"
 
+#include <thread>
 
 using Int = long long;
 
 int maxTowerHeight = 0;
-int nbBlocks = 0;
 
 struct Block
 {
@@ -33,7 +31,6 @@ struct Block
         ss >> largeur;
         ss >> profondeur;
 
-        float smallestSide;
         if(largeur < profondeur)
         { 
             smallestSide = (float)largeur;
@@ -43,22 +40,42 @@ struct Block
             smallestSide = (float)profondeur;
         }
 
-        criterion = smallestSide * smallestSide / hauteur;
         id = idGen++;
     }
 
     bool fitOn(const Block& bottom) const
     {
-        return this->largeur <= bottom.largeur && this->profondeur <= bottom.profondeur;
+        return this->largeur < bottom.largeur && this->profondeur < bottom.profondeur;
     }
     
     static int idGen;
     int id;
-    int hauteur = 0;
-    int largeur = 0;
-    int profondeur = 0;
+    float hauteur = 0;
+    float largeur = 0;
+    float profondeur = 0;
     float criterion = 0;
+    float smallestSide = 0;    
 };
+
+bool areaCriterion(Block& a, Block& b)
+{
+    return a.largeur * a.profondeur > b.largeur * b.profondeur;
+}
+
+bool areaAndShortestCriterion(Block& a, Block& b)
+{
+    return a.largeur * a.profondeur / a.hauteur > b.largeur * b.profondeur / b.hauteur;
+}
+
+bool squarestCriterion(Block& a, Block& b)
+{
+    return a.smallestSide * a.smallestSide > b.smallestSide * b.smallestSide;
+}
+
+bool squarestAndShortestCriterion(Block& a, Block& b)
+{
+    return a.smallestSide * a.smallestSide / a.hauteur > b.largeur * b.profondeur / b.hauteur;
+}
 
 struct Tower
 {
@@ -66,12 +83,17 @@ struct Tower
     {
     }
 
-    Tower(std::list<Block> blocks)
+    Tower(Block block)
     {
-        this->blocks = blocks;
+        push_back(block);
+    }
+
+    Tower(std::list<Block> blocks) : Tower()
+    {
         for(auto blockIt = blocks.begin(); blockIt != blocks.end(); ++blockIt)
         {
             height += blockIt->hauteur;
+            this->blocks.push_back(*blockIt);
         }
     }
 
@@ -97,10 +119,16 @@ struct Tower
         height -= it->hauteur;
         return blocks.erase(it);
     }
+
+    void pop_back()
+    {
+        height -= blocks.back().hauteur;
+        blocks.pop_back();
+    }
     
     void setTabou(int blockId)
     {
-        tabous[blockId] = rand()% 4 + 7;
+        tabous[blockId] = rand()% 100 + 100;
     }
 
     bool updateTabou()
@@ -121,24 +149,54 @@ struct Tower
     void print()
     {
         std::cout << blocks.size() << std::endl;
-        for (auto block = blocks.begin(); block != blocks.end(); block++)
-            std::cout << block->hauteur << " " << block->largeur << " " << block->profondeur << std::endl;
+        for (auto blockIt = blocks.rbegin(); blockIt != blocks.rend(); blockIt++)
+        {
+            Block block = *blockIt;
+            std::cout << block.hauteur << " " << block.largeur << " " << block.profondeur << std::endl;
+        }
+    }
+
+    std::list<Block>::iterator begin()
+    {
+        return blocks.begin();
+    }
+
+    std::list<Block>::iterator end()
+    {
+        return blocks.end();
+    }
+
+    std::list<Block>::reverse_iterator rbegin()
+    {
+        return blocks.rbegin();
+    }
+
+    std::list<Block>::reverse_iterator rend()
+    {
+        return blocks.rend();
+    }
+
+    Block back()
+    {
+        return blocks.back();
+    }
+
+    bool empty()
+    {
+        return blocks.empty();
     }
 
     std::map<int, int> tabous;
-    std::list<Block> blocks;
     int height = 0;
+    private:
+    std::list<Block> blocks;
 };
 
 int Block::idGen = 0;
 
-std::list<Block> vorace(std::list<Block>& blocks)
+std::list<Block> vorace(std::list<Block>& blocks, bool(*predicate)(Block&, Block&))
 {
-    blocks.sort( 
-        [](const Block& a, const Block& b) -> bool 
-        {
-            return a.criterion > b.criterion;
-        });
+    blocks.sort(predicate);
 
     int towerHeight = 0;
 
@@ -183,26 +241,40 @@ std::list<Block> vorace(std::list<Block>& blocks)
 
 using Towers = std::list<Tower>;
 
-Towers* multiTowersVorace(std::list<Block>& blocks)
+Towers& multiTowersVorace(std::list<Block>& blocks, bool(*predicate)(Block&, Block&))
 {
     Towers* towers = new Towers();
     while (!blocks.empty())
     {
-        towers->emplace_back(vorace(blocks));
+        towers->emplace_back(vorace(blocks, predicate));
     }
 
-    return towers;
+    return *towers;
 }
 
-Tower* findSmallestTower(Towers* towers)
+Towers& worstCaseStart(std::list<Block>& blocks)
+{
+    Towers* towers = new Towers();
+    while (!blocks.empty())
+    {
+        towers->emplace_back(blocks.back());
+        blocks.pop_back();
+    }
+
+    return *towers;
+}
+
+int findSmallestTower(Towers& towers)
 {
     int smallestHeight = INT32_MAX;
-    Tower* smallestTower;
-    for(auto tower = towers->begin(); tower != towers->end(); ++tower)
+    int i;
+    int smallestTower = 0;
+    Towers::iterator tower;
+    for(tower = towers.begin(), i =0; tower != towers.end(); ++tower, ++i)
     {
         if(tower->height < smallestHeight)
         {
-            smallestTower = &*tower;
+            smallestTower = i;
             smallestHeight = tower->height;
         }
     }
@@ -210,7 +282,7 @@ Tower* findSmallestTower(Towers* towers)
     return smallestTower;
 }
 
-std::vector<Block> trimTower(Tower* tower, Block blockToInsert, std::vector<Block> blocksToRemove)
+std::list<Block> trimTower(Towers::iterator& tower, Block& blockToInsert, std::list<Block>& blocksToRemove)
 {
     int heightToRemove = std::accumulate(blocksToRemove.begin(), blocksToRemove.end(), 0, [](int sum, Block block){
         return sum + block.hauteur;
@@ -222,7 +294,7 @@ std::vector<Block> trimTower(Tower* tower, Block blockToInsert, std::vector<Bloc
         while (sizeToRemove > 0)
         {
             Block tallestBlock ;
-            for(auto blockIt = tower->blocks.begin(); blockIt != tower->blocks.end(); ++blockIt)
+            for(auto blockIt = tower->begin(); blockIt != tower->end(); ++blockIt)
             {
                 bool ignoreBlock = std::find_if(blocksToRemove.begin(), blocksToRemove.end(), [blockIt](Block block) 
                                         { 
@@ -232,10 +304,9 @@ std::vector<Block> trimTower(Tower* tower, Block blockToInsert, std::vector<Bloc
                 {
                     tallestBlock = *blockIt;
                 }
-            }        
+            }
             
             blocksToRemove.push_back(tallestBlock);
-            heightToRemove += tallestBlock.hauteur;
             sizeToRemove -= tallestBlock.hauteur;
         }
     }
@@ -243,17 +314,21 @@ std::vector<Block> trimTower(Tower* tower, Block blockToInsert, std::vector<Bloc
     return blocksToRemove;
 }
 
-std::vector<Block> findBestTowerToInsertInto(Towers* towers, Block blockToInsert, Tower* smallestTower, 
-                                             Towers::iterator* bestTowerToInsertIt, std::list<Block>::iterator* bestTowerInsertionIt)
+std::list<Block> findBestTowerToInsertInto(Towers& towers, Block& blockToInsert, Towers::iterator& smallestTower, 
+                                             int& bestTowerToInsert, int& bestTowerInsertion)
 {
-    std::vector<Block> smallestBlocksToRemove;
-    std::vector<Block> blocksToRemove;
-    for(auto towerToInsertIt = towers->begin(); towerToInsertIt != towers->end(); ++towerToInsertIt)
+    int smallestNbrOfBlocsToRemove = INT32_MAX;
+    std::list<Block> smallestBlocksToRemove;
+    std::list<Block> blocksToRemove;
+    Towers::iterator towerToInsertIt;
+    int towerToInsert;
+    for(towerToInsertIt = towers.begin(), towerToInsert = 0; towerToInsertIt != towers.end(); ++towerToInsertIt, ++towerToInsert)
     {
         if(&*towerToInsertIt == &*smallestTower) continue;
-        
-        auto towerInsertionIt = towerToInsertIt->blocks.begin();
-        for (auto blockIt = towerToInsertIt->blocks.rbegin(); blockIt != towerToInsertIt->blocks.rend(); ++blockIt)
+
+        auto towerInsertionIt = towerToInsertIt->begin();
+        int towerInsertion = 0;
+        for (auto blockIt = towerToInsertIt->rbegin(); blockIt != towerToInsertIt->rend(); ++blockIt, ++towerInsertion)
         {
             if(blockToInsert.fitOn(*blockIt))
             {
@@ -264,18 +339,19 @@ std::vector<Block> findBestTowerToInsertInto(Towers* towers, Block blockToInsert
 
         // Check if the blocks, that the new block did not fit on, fit on the new block. If not, tabou it.
         auto blockToRemoveIt = towerInsertionIt;
-        for(blockToRemoveIt; blockToRemoveIt != towerToInsertIt->blocks.end() && !blockToRemoveIt->fitOn(blockToInsert); blockToRemoveIt++)
+        for(blockToRemoveIt; blockToRemoveIt != towerToInsertIt->end() && !blockToRemoveIt->fitOn(blockToInsert); blockToRemoveIt++)
         {
             blocksToRemove.push_back(*blockToRemoveIt);
         }
 
-        blocksToRemove = trimTower(&*towerToInsertIt, blockToInsert, blocksToRemove);
+        blocksToRemove = trimTower(towerToInsertIt, blockToInsert, blocksToRemove);
 
-        if (blocksToRemove.size() < smallestBlocksToRemove.size())
+        if (blocksToRemove.size() < smallestNbrOfBlocsToRemove)
         {
             smallestBlocksToRemove = blocksToRemove;
-            *bestTowerToInsertIt = towerToInsertIt;
-            *bestTowerInsertionIt = towerInsertionIt;
+            bestTowerToInsert = towerToInsert;
+            bestTowerInsertion = towerInsertion;
+            smallestNbrOfBlocsToRemove = blocksToRemove.size();
         }
         
         blocksToRemove.clear();
@@ -284,98 +360,81 @@ std::vector<Block> findBestTowerToInsertInto(Towers* towers, Block blockToInsert
     return smallestBlocksToRemove;
 }
 
-void tabou(Towers* towers, bool print_res)
+void tabou(Towers& currentSolution, bool(*predicate)(Block&, Block&))
 {
-    int maxHeight = 0;
-    Towers bestSolution = *towers;
-    Towers* currentSolution = towers;
-
     // Start iterating and stop when no better tower is found during a 100 iterations    
-    for(int iteration = 0; iteration < 100; iteration++)
+    auto smallestTowerIt = std::next(currentSolution.begin(), findSmallestTower(currentSolution));
+    int towerToInsert;
+    int towerInsertion;
+    Block blockToMove = smallestTowerIt->back();
+
+    std::list<Block> blocksToRemove = 
+        findBestTowerToInsertInto(currentSolution, blockToMove, smallestTowerIt, towerToInsert, towerInsertion);
+    
+    auto towerToInsertIt = std::next(currentSolution.begin(), towerToInsert);
+    auto towerInsertionIt = std::next(towerToInsertIt->begin(), towerInsertion);
+    towerToInsertIt->insert(towerInsertionIt, std::move(blockToMove));
+
+    smallestTowerIt->pop_back();
+    if (smallestTowerIt->empty())
     {
-        Tower* smallestTower = findSmallestTower(currentSolution);
-        std::cout << "Smallest Tower : \n" << std::endl;
-        smallestTower->print();
-        auto towerToInsertIt = currentSolution->begin();
-        std::list<Block>::iterator towerInsertionIt;
-        Block blockToMove = smallestTower->blocks.back();
+        currentSolution.erase(smallestTowerIt);
+    }
 
-        std::vector<Block> blocksToRemove = 
-            findBestTowerToInsertInto(currentSolution, blockToMove, smallestTower, &towerToInsertIt, &towerInsertionIt);
+    // Update the already tabous blocks
+    for(auto tower = currentSolution.begin(); tower != currentSolution.end(); ++tower)
+    {
+        tower->updateTabou();
+    }
+    
+    for(auto blockIt = blocksToRemove.begin(); blockIt != blocksToRemove.end(); ++blockIt)
+    { 
+        auto removeIt = std::find_if(towerToInsertIt->begin(), towerToInsertIt->end(), 
+            [blockIt](Block block) 
+            { 
+                return blockIt->id == block.id; 
+            });
         
-        towerToInsertIt->blocks.insert(towerInsertionIt, blockToMove);
+        towerToInsertIt->erase(removeIt);
+    }
 
-        smallestTower->blocks.pop_back();
-
-        // Update the already tabous blocks
-        for(auto tower = towers->begin(); tower != towers->end(); ++tower)
-        {
-            tower->updateTabou();
-        }
+    if (!blocksToRemove.empty())
+    {
+        blocksToRemove.sort(predicate);
         
-        for(auto blockIt = towerToInsertIt->blocks.begin(); blockIt != towerToInsertIt->blocks.end();)
-        { 
-            bool shouldRemove = std::find_if(blocksToRemove.begin(), blocksToRemove.end(), 
-                [blockIt](Block block) 
-                { 
-                    return blockIt->id == block.id; 
-                }) != blocksToRemove.end();
-            
-            if (shouldRemove)
-            {
-                towerToInsertIt->setTabou(blockIt->id);
-                blockIt = towerToInsertIt->erase(blockIt++);
-            }
-            else
-            {
-                ++blockIt;
-            }
-        }
-
-        // Check if the chosen possible tower is taller than the tallest tower encountered
-        if(currentSolution->size() < bestSolution.size())
-        {
-            bestSolution = *currentSolution;
-            if (print_res) 
-            {
-                std::cout << std::fixed;
-                for (auto tower = currentSolution->begin(); tower != currentSolution->end(); tower++)
-                {
-                    tower->print();
-                }
-            }
-            else
-            {
-                std::cout << currentSolution->size() << std::endl;
-            }
-        }
-        std::cout << iteration << std::endl;        
+        currentSolution.emplace_back(blocksToRemove);
+        blocksToRemove.clear();
     }
 }
 
-void run(std::list<Block>& blocks, bool print_res, bool print_time) {
-    using namespace std::chrono;
-    auto start = steady_clock::now();
-    Towers* towers = multiTowersVorace(blocks);
-    if (print_res) 
-    {
-        std::cout << std::fixed;
-        for (auto tower = towers->begin(); tower != towers->end(); tower++)
-        {
-            tower->print();
-        }
-    }
-    else
-    {
-        std::cout << towers->size() << std::endl;
-    }
-    tabou(towers, print_res);
-    auto end = steady_clock::now();
+static ConcurrentWaitingQueue<Towers> queue;
+void run(std::list<Block> blocks, bool(*predicate)(Block&, Block&)) {
+    Towers& solution = multiTowersVorace(blocks, predicate);
+    int smallestSolutionSize = INT32_MAX;
 
-    if (print_time) 
+    while(true)
     {
-        duration<double> s = end-start;
-        std::cout << std::fixed << s.count() << std::endl;
+        if(solution.size() < smallestSolutionSize)
+        {
+            queue.push(solution);
+            smallestSolutionSize = solution.size();
+        }
+        tabou(solution, predicate);
+    }
+}
+
+void runVorace(std::list<Block> blocks, bool(*predicate)(Block&, Block&)) 
+{
+    int smallestSolutionSize = INT32_MAX;
+    while(true)
+    {
+        std::list<Block> copy = blocks;
+        Towers& solution = multiTowersVorace(copy, predicate);
+        if(solution.size() < smallestSolutionSize)
+        {
+            queue.push(solution);
+            smallestSolutionSize = solution.size();
+        }
     }
 }
 
@@ -410,7 +469,7 @@ int main(int argc, char *argv[]) {
         std::string line;
 
         std::getline(infile, line);
-        nbBlocks = std::stoi(line);
+        int nbBlocks = std::stoi(line);
 
         std::getline(infile, line);
         maxTowerHeight = std::stoi(line);
@@ -421,5 +480,34 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    run(blocks, prog_args.print_res, prog_args.print_time);
+    bool(* predicates [])(Block&, Block&) = {areaCriterion, areaAndShortestCriterion, squarestCriterion, squarestAndShortestCriterion};
+    for (int i = 0; i < std::thread::hardware_concurrency() - 1; ++i)
+    {
+        std::thread(run, blocks, predicates[i]).detach();
+    }
+    std::thread(runVorace, blocks, squarestAndShortestCriterion).detach();
+
+    int sizeBestSolution = INT32_MAX;
+    // Check if the chosen possible tower is taller than the tallest tower encountered
+    while(true)
+    {
+        Towers solution;
+        queue.pop(solution);
+        if(solution.size() < sizeBestSolution)
+        {
+            sizeBestSolution = solution.size();
+            if (prog_args.print_res) 
+            {
+                for (auto tower = solution.begin(); tower != solution.end(); tower++)
+                {
+                    tower->print();
+                }
+                std::cout << "fin" << std::endl;
+            }
+            else
+            {
+                std::cout << solution.size() << std::endl;
+            }
+        }
+    }
 }

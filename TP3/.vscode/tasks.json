@@ -6,7 +6,7 @@
         {
             "label": "Debug Build",
             "type": "shell",
-            "command": "g++ -g --std=c++14 towerGenerator.cpp -o towerGenerator",
+            "command": "g++ -g -pthread --std=c++14 towerGenerator.cpp -o towerGenerator",
             "group": {
                 "kind": "build",
                 "isDefault": true
@@ -16,7 +16,7 @@
         {
             "label": "Release Build",
             "type": "shell",
-            "command": "g++ --std=c++14 -O3 towerGenerator.cpp -o towerGenerator",
+            "command": "g++ -pthread --std=c++14 -O3 towerGenerator.cpp -o towerGenerator",
             "group": {
                 "kind": "build",
                 "isDefault": false

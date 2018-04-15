@@ -35,6 +35,14 @@
         "type_traits": "cpp",
         "typeinfo": "cpp",
         "utility": "cpp",
-        "*.ipp": "cpp"
+        "*.ipp": "cpp",
+        "string_view": "cpp",
+        "algorithm": "cpp",
+        "iterator": "cpp",
+        "memory_resource": "cpp",
+        "random": "cpp",
+        "string": "cpp",
+        "unordered_map": "cpp",
+        "vector": "cpp"
     }
 }
